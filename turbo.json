@@ -1,6 +1,21 @@
 {
   "$schema": "https://turbo.build/schema.json",
   "ui": "tui",
+  "globalEnv": [
+    "NODE_ENV",
+    "PORT",
+    "HOST",
+    "CORS_ORIGIN",
+    "DATABASE_ADMIN_URL",
+    "DATABASE_URL",
+    "REDIS_URL",
+    "SMTP_HOST",
+    "SMTP_PORT",
+    "EMAIL_FROM",
+    "GEMINI_API_KEY",
+    "LLM_DEFAULT_MODEL",
+    "LLM_EMBEDDING_MODEL"
+  ],
   "tasks": {
     "build": {
       "dependsOn": ["^build"],

@@ -10,6 +10,14 @@ export async function runSqlMigrations(adminDatabaseUrl: string): Promise<string
     const client = await pool.connect();
     try {
       await client.query(`
+        DO $$
+        BEGIN
+          IF NOT EXISTS (SELECT FROM pg_catalog.pg_roles WHERE rolname = 'teamloom_app') THEN
+            CREATE ROLE teamloom_app WITH LOGIN PASSWORD 'teamloom_app_local_pw' NOBYPASSRLS;
+          END IF;
+        END
+        $$;
+
         CREATE TABLE IF NOT EXISTS _schema_migrations (
           id SERIAL PRIMARY KEY,
           filename TEXT NOT NULL UNIQUE,

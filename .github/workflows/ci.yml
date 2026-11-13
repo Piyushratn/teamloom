@@ -1,0 +1,84 @@
+name: CI
+
+on:
+  push:
+    branches: ['main']
+  pull_request:
+    branches: ['main']
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  verify:
+    name: Lint, Typecheck, Build & Test
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    services:
+      postgres:
+        image: pgvector/pgvector:pg16
+        env:
+          POSTGRES_USER: teamloom_admin
+          POSTGRES_PASSWORD: teamloom_admin_local_pw
+          POSTGRES_DB: teamloom_dev
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U teamloom_admin -d teamloom_dev"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+
+      redis:
+        image: redis:7.4-alpine
+        ports:
+          - 6379:6379
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+
+    env:
+      NODE_ENV: test
+      DATABASE_ADMIN_URL: postgresql://teamloom_admin:teamloom_admin_local_pw@localhost:5432/teamloom_dev
+      DATABASE_URL: postgresql://teamloom_app:teamloom_app_local_pw@localhost:5432/teamloom_dev
+      REDIS_URL: redis://localhost:6379
+      SMTP_HOST: localhost
+      SMTP_PORT: 1025
+      EMAIL_FROM: noreply@teamloom.local
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Install pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 9.15.0
+
+      - name: Setup Node.js 22
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: 'pnpm'
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Run database migrations (creates teamloom_app role & RLS helpers)
+        run: pnpm --filter @teamloom/api db:migrate
+
+      - name: Build all packages
+        run: pnpm build
+
+      - name: Run ESLint
+        run: pnpm lint
+
+      - name: Run TypeScript typecheck
+        run: pnpm typecheck
+
+      - name: Run unit & integration tests
+        run: pnpm test

@@ -2,65 +2,74 @@ import * as fs from 'node:fs';
 import * as path from 'node:path';
 import { Pool } from 'pg';
 
+const MIGRATION_ADVISORY_LOCK_ID = 73461009;
+
 export async function runSqlMigrations(adminDatabaseUrl: string): Promise<string[]> {
-  const pool = new Pool({ connectionString: adminDatabaseUrl });
+  const pool = new Pool({ connectionString: adminDatabaseUrl, max: 1 });
   const appliedNow: string[] = [];
 
   try {
     const client = await pool.connect();
     try {
-      await client.query(`
-        DO $$
-        BEGIN
-          IF NOT EXISTS (SELECT FROM pg_catalog.pg_roles WHERE rolname = 'teamloom_app') THEN
-            CREATE ROLE teamloom_app WITH LOGIN PASSWORD 'teamloom_app_local_pw' NOBYPASSRLS;
-          END IF;
-        END
-        $$;
+      // Acquire an exclusive PostgreSQL advisory lock so concurrent test workers or replicas never collide
+      await client.query('SELECT pg_advisory_lock($1)', [MIGRATION_ADVISORY_LOCK_ID]);
 
-        CREATE TABLE IF NOT EXISTS _schema_migrations (
-          id SERIAL PRIMARY KEY,
-          filename TEXT NOT NULL UNIQUE,
-          applied_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
-        );
-        GRANT SELECT ON TABLE _schema_migrations TO teamloom_app;
-      `);
+      try {
+        await client.query(`
+          DO $$
+          BEGIN
+            IF NOT EXISTS (SELECT FROM pg_catalog.pg_roles WHERE rolname = 'teamloom_app') THEN
+              CREATE ROLE teamloom_app WITH LOGIN PASSWORD 'teamloom_app_local_pw' NOBYPASSRLS;
+            END IF;
+          END
+          $$;
 
-      const migrationsDir = path.resolve(__dirname, '../../drizzle/migrations');
-      if (!fs.existsSync(migrationsDir)) {
-        return appliedNow;
-      }
+          CREATE TABLE IF NOT EXISTS _schema_migrations (
+            id SERIAL PRIMARY KEY,
+            filename TEXT NOT NULL UNIQUE,
+            applied_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+          );
+          GRANT SELECT ON TABLE _schema_migrations TO teamloom_app;
+        `);
 
-      const files = fs
-        .readdirSync(migrationsDir)
-        .filter((f) => f.endsWith('.sql'))
-        .sort();
-
-      for (const file of files) {
-        const existing = await client.query(
-          'SELECT 1 FROM _schema_migrations WHERE filename = $1',
-          [file],
-        );
-
-        if (existing.rowCount && existing.rowCount > 0) {
-          continue;
+        const migrationsDir = path.resolve(__dirname, '../../drizzle/migrations');
+        if (!fs.existsSync(migrationsDir)) {
+          return appliedNow;
         }
 
-        const sqlContent = fs.readFileSync(path.join(migrationsDir, file), 'utf8');
+        const files = fs
+          .readdirSync(migrationsDir)
+          .filter((f) => f.endsWith('.sql'))
+          .sort();
 
-        await client.query('BEGIN');
-        try {
-          await client.query(sqlContent);
-          await client.query(
-            'INSERT INTO _schema_migrations (filename) VALUES ($1)',
+        for (const file of files) {
+          const existing = await client.query(
+            'SELECT 1 FROM _schema_migrations WHERE filename = $1',
             [file],
           );
-          await client.query('COMMIT');
-          appliedNow.push(file);
-        } catch (err) {
-          await client.query('ROLLBACK');
-          throw err;
+
+          if (existing.rowCount && existing.rowCount > 0) {
+            continue;
+          }
+
+          const sqlContent = fs.readFileSync(path.join(migrationsDir, file), 'utf8');
+
+          await client.query('BEGIN');
+          try {
+            await client.query(sqlContent);
+            await client.query(
+              'INSERT INTO _schema_migrations (filename) VALUES ($1)',
+              [file],
+            );
+            await client.query('COMMIT');
+            appliedNow.push(file);
+          } catch (err) {
+            await client.query('ROLLBACK');
+            throw err;
+          }
         }
+      } finally {
+        await client.query('SELECT pg_advisory_unlock($1)', [MIGRATION_ADVISORY_LOCK_ID]);
       }
     } finally {
       client.release();

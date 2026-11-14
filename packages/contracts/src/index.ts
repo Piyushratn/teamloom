@@ -119,3 +119,95 @@ export const ActiveSessionSchema = z.object({
   isCurrent: z.boolean(),
 });
 export type ActiveSession = z.infer<typeof ActiveSessionSchema>;
+
+/**
+ * Organizations, Invites, Roles & Audit Log Schemas (Stage 3)
+ */
+export const OrganizationSlugSchema = z
+  .string()
+  .trim()
+  .toLowerCase()
+  .min(3, 'Slug must be at least 3 characters')
+  .max(48, 'Slug must be at most 48 characters')
+  .regex(
+    /^[a-z0-9-]+$/,
+    'Slug may only contain lowercase letters, numbers, and hyphens',
+  );
+
+export const CreateOrganizationRequestSchema = z.object({
+  name: z.string().trim().min(2, 'Organization name must be at least 2 characters').max(80),
+  slug: OrganizationSlugSchema,
+});
+export type CreateOrganizationRequest = z.infer<typeof CreateOrganizationRequestSchema>;
+
+export const InviteOrganizationMemberRequestSchema = z.object({
+  email: z.string().trim().toLowerCase().email('Invalid email address'),
+  role: z.enum(['admin', 'member', 'guest']),
+  guestProjectIds: z.array(z.string().uuid()).default([]),
+});
+export type InviteOrganizationMemberRequest = z.infer<
+  typeof InviteOrganizationMemberRequestSchema
+>;
+
+export const AcceptOrganizationInviteRequestSchema = z.object({
+  token: z.string().trim().min(32).max(256),
+});
+export type AcceptOrganizationInviteRequest = z.infer<
+  typeof AcceptOrganizationInviteRequestSchema
+>;
+
+export const UpdateMemberRoleRequestSchema = z.object({
+  role: z.enum(['admin', 'member', 'guest']),
+  guestProjectIds: z.array(z.string().uuid()).optional(),
+});
+export type UpdateMemberRoleRequest = z.infer<typeof UpdateMemberRoleRequestSchema>;
+
+export const TransferOwnershipRequestSchema = z.object({
+  newOwnerUserId: z.string().uuid(),
+});
+export type TransferOwnershipRequest = z.infer<typeof TransferOwnershipRequestSchema>;
+
+export const UpdateOrganizationAiSettingsRequestSchema = z
+  .object({
+    aiEnabled: z.boolean().optional(),
+    aiKillSwitch: z.boolean().optional(),
+    monthlyAiBudgetUsdCents: z.number().int().min(0).max(10_000_000).optional(),
+  })
+  .refine(
+    (data) =>
+      data.aiEnabled !== undefined ||
+      data.aiKillSwitch !== undefined ||
+      data.monthlyAiBudgetUsdCents !== undefined,
+    { message: 'At least one AI setting field must be provided' },
+  );
+export type UpdateOrganizationAiSettingsRequest = z.infer<
+  typeof UpdateOrganizationAiSettingsRequestSchema
+>;
+
+export const OrganizationSummarySchema = z.object({
+  id: z.string().uuid(),
+  name: z.string(),
+  slug: z.string(),
+  ownerId: z.string().uuid(),
+  myRole: OrganizationRoleSchema,
+  aiEnabled: z.boolean(),
+  aiKillSwitch: z.boolean(),
+  monthlyAiBudgetUsdCents: z.number().int(),
+  createdAt: z.string().datetime(),
+});
+export type OrganizationSummary = z.infer<typeof OrganizationSummarySchema>;
+
+export const AuditLogEntrySchema = z.object({
+  id: z.string().uuid(),
+  organizationId: z.string().uuid(),
+  actorUserId: z.string().uuid().nullable(),
+  actorType: z.enum(['user', 'agent', 'system']),
+  action: z.string(),
+  targetType: z.string(),
+  targetId: z.string().nullable(),
+  metadata: z.record(z.unknown()),
+  ipAddress: z.string().nullable(),
+  userAgent: z.string().nullable(),
+  createdAt: z.string().datetime(),
+});
+export type AuditLogEntry = z.infer<typeof AuditLogEntrySchema>;

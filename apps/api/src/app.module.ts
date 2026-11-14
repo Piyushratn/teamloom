@@ -7,6 +7,7 @@ import { validateEnv, type AppEnv } from './config/env.schema';
 import { DatabaseModule } from './database/database.module';
 import { EmailModule } from './email/email.module';
 import { HealthModule } from './health/health.module';
+import { OrganizationsModule } from './organizations/organizations.module';
 import { RedisModule } from './redis/redis.module';
 
 @Module({
@@ -65,6 +66,7 @@ import { RedisModule } from './redis/redis.module';
     RedisModule,
     EmailModule,
     AuthModule,
+    OrganizationsModule,
     HealthModule,
   ],
 })

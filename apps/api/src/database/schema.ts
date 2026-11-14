@@ -1,13 +1,16 @@
 import {
   boolean,
   index,
+  integer,
   jsonb,
   pgTable,
   serial,
   text,
   timestamp,
+  unique,
   uuid,
 } from 'drizzle-orm/pg-core';
+import type { OrganizationRole } from '@teamloom/contracts';
 
 /**
  * Tracks applied hand-written SQL migrations.
@@ -87,5 +90,127 @@ export const verificationTokens = pgTable(
   },
   (table) => [
     index('idx_verification_tokens_user_purpose').on(table.userId, table.purpose),
+  ],
+);
+
+/**
+ * Multi-tenant Organizations with AI budget and kill-switch controls.
+ */
+export const organizations = pgTable(
+  'organizations',
+  {
+    id: uuid('id').defaultRandom().primaryKey(),
+    name: text('name').notNull(),
+    slug: text('slug').notNull().unique(),
+    ownerId: uuid('owner_id')
+      .notNull()
+      .references(() => users.id, { onDelete: 'restrict' }),
+    aiEnabled: boolean('ai_enabled').default(true).notNull(),
+    aiKillSwitch: boolean('ai_kill_switch').default(false).notNull(),
+    monthlyAiBudgetUsdCents: integer('monthly_ai_budget_usd_cents')
+      .default(1000)
+      .notNull(),
+    createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
+    updatedAt: timestamp('updated_at', { withTimezone: true }).defaultNow().notNull(),
+  },
+  (table) => [
+    index('idx_organizations_slug').on(table.slug),
+    index('idx_organizations_owner_id').on(table.ownerId),
+  ],
+);
+
+/**
+ * Organization Memberships (RLS-protected).
+ */
+export const organizationMembers = pgTable(
+  'organization_members',
+  {
+    id: uuid('id').defaultRandom().primaryKey(),
+    organizationId: uuid('organization_id')
+      .notNull()
+      .references(() => organizations.id, { onDelete: 'cascade' }),
+    userId: uuid('user_id')
+      .notNull()
+      .references(() => users.id, { onDelete: 'cascade' }),
+    role: text('role').$type<OrganizationRole>().notNull(),
+    guestProjectIds: jsonb('guest_project_ids')
+      .$type<string[]>()
+      .default([])
+      .notNull(),
+    joinedAt: timestamp('joined_at', { withTimezone: true }).defaultNow().notNull(),
+  },
+  (table) => [
+    unique('organization_members_org_user_unique').on(
+      table.organizationId,
+      table.userId,
+    ),
+    index('idx_org_members_org_id').on(table.organizationId),
+    index('idx_org_members_user_id').on(table.userId),
+  ],
+);
+
+/**
+ * Expiring Email Invitations to an Organization (RLS-protected).
+ */
+export const organizationInvites = pgTable(
+  'organization_invites',
+  {
+    id: uuid('id').defaultRandom().primaryKey(),
+    organizationId: uuid('organization_id')
+      .notNull()
+      .references(() => organizations.id, { onDelete: 'cascade' }),
+    email: text('email').notNull(),
+    role: text('role')
+      .$type<Exclude<OrganizationRole, 'owner'>>()
+      .notNull(),
+    guestProjectIds: jsonb('guest_project_ids')
+      .$type<string[]>()
+      .default([])
+      .notNull(),
+    tokenHash: text('token_hash').notNull().unique(),
+    invitedByUserId: uuid('invited_by_user_id')
+      .notNull()
+      .references(() => users.id, { onDelete: 'cascade' }),
+    expiresAt: timestamp('expires_at', { withTimezone: true }).notNull(),
+    acceptedAt: timestamp('accepted_at', { withTimezone: true }),
+    revokedAt: timestamp('revoked_at', { withTimezone: true }),
+    createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
+  },
+  (table) => [
+    index('idx_org_invites_org_id').on(table.organizationId),
+    index('idx_org_invites_token_hash').on(table.tokenHash),
+  ],
+);
+
+/**
+ * Append-only security & AI agent audit log (RLS-protected + immutable trigger).
+ */
+export const auditLogs = pgTable(
+  'audit_logs',
+  {
+    id: uuid('id').defaultRandom().primaryKey(),
+    organizationId: uuid('organization_id')
+      .notNull()
+      .references(() => organizations.id, { onDelete: 'cascade' }),
+    actorUserId: uuid('actor_user_id').references(() => users.id, {
+      onDelete: 'set null',
+    }),
+    actorType: text('actor_type')
+      .$type<'user' | 'agent' | 'system'>()
+      .notNull(),
+    action: text('action').notNull(),
+    targetType: text('target_type').notNull(),
+    targetId: text('target_id'),
+    metadata: jsonb('metadata')
+      .$type<Record<string, unknown>>()
+      .default({})
+      .notNull(),
+    ipAddress: text('ip_address'),
+    userAgent: text('user_agent'),
+    createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
+  },
+  (table) => [
+    index('idx_audit_logs_org_created').on(table.organizationId, table.createdAt),
+    index('idx_audit_logs_org_action').on(table.organizationId, table.action),
   ],
 );

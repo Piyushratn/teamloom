@@ -361,3 +361,141 @@ export const DocumentSchema = z.object({
   updatedAt: z.string().datetime(),
 });
 export type Document = z.infer<typeof DocumentSchema>;
+
+/**
+ * RAG & Hybrid Semantic Knowledge Engine Schemas (Stage 5)
+ */
+export const KnowledgeSourceTypeSchema = z.enum(['document', 'task']);
+export type KnowledgeSourceType = z.infer<typeof KnowledgeSourceTypeSchema>;
+
+export const HybridSearchRequestSchema = z.object({
+  query: z.string().trim().min(2, 'Search query must be at least 2 characters').max(500),
+  projectId: z.string().uuid().optional(),
+  sourceTypes: z
+    .array(KnowledgeSourceTypeSchema)
+    .min(1)
+    .default(['document', 'task']),
+  limit: z.coerce.number().int().min(1).max(25).default(8),
+});
+export type HybridSearchRequest = z.infer<typeof HybridSearchRequestSchema>;
+
+export const KnowledgeSearchResultItemSchema = z.object({
+  chunkId: z.string().uuid(),
+  sourceType: KnowledgeSourceTypeSchema,
+  sourceId: z.string().uuid(),
+  projectId: z.string().uuid().nullable(),
+  chunkIndex: z.number().int(),
+  title: z.string(),
+  content: z.string(),
+  semanticScore: z.number(),
+  lexicalScore: z.number(),
+  hybridScore: z.number(),
+});
+export type KnowledgeSearchResultItem = z.infer<
+  typeof KnowledgeSearchResultItemSchema
+>;
+
+export const HybridSearchResponseSchema = z.object({
+  query: z.string(),
+  results: z.array(KnowledgeSearchResultItemSchema),
+});
+export type HybridSearchResponse = z.infer<typeof HybridSearchResponseSchema>;
+
+/**
+ * Approval-Gated AI Agent Layer & Cost Governance Schemas (Stage 6)
+ */
+export const AiFeatureTypeSchema = z.enum([
+  'copilot_ask',
+  'project_triage',
+  'sprint_plan',
+]);
+export type AiFeatureType = z.infer<typeof AiFeatureTypeSchema>;
+
+export const ProposedActionTypeSchema = z.enum([
+  'create_task',
+  'update_task',
+  'create_document',
+]);
+export type ProposedActionType = z.infer<typeof ProposedActionTypeSchema>;
+
+export const ProposedActionStatusSchema = z.enum([
+  'pending',
+  'approved',
+  'rejected',
+  'executed',
+]);
+export type ProposedActionStatus = z.infer<typeof ProposedActionStatusSchema>;
+
+export const CopilotAskRequestSchema = z.object({
+  question: z.string().trim().min(3, 'Question must be at least 3 characters').max(2000),
+  projectId: z.string().uuid().optional(),
+});
+export type CopilotAskRequest = z.infer<typeof CopilotAskRequestSchema>;
+
+export const CopilotCitationSchema = z.object({
+  chunkId: z.string().uuid(),
+  sourceType: KnowledgeSourceTypeSchema,
+  sourceId: z.string().uuid(),
+  title: z.string(),
+  hybridScore: z.number(),
+});
+export type CopilotCitation = z.infer<typeof CopilotCitationSchema>;
+
+export const CopilotAskResponseSchema = z.object({
+  answerMarkdown: z.string(),
+  citations: z.array(CopilotCitationSchema),
+  model: z.string(),
+  tokensUsed: z.number().int(),
+  costUsdCents: z.number().int(),
+});
+export type CopilotAskResponse = z.infer<typeof CopilotAskResponseSchema>;
+
+export const ProposeProjectActionsRequestSchema = z.object({
+  projectId: z.string().uuid(),
+  goal: z
+    .string()
+    .trim()
+    .min(5, 'Goal must be at least 5 characters')
+    .max(2000),
+  mode: z.enum(['project_triage', 'sprint_plan']).default('sprint_plan'),
+});
+export type ProposeProjectActionsRequest = z.infer<
+  typeof ProposeProjectActionsRequestSchema
+>;
+
+export const ProposedActionSchema = z.object({
+  id: z.string().uuid(),
+  organizationId: z.string().uuid(),
+  projectId: z.string().uuid(),
+  requestedByUserId: z.string().uuid(),
+  actionType: ProposedActionTypeSchema,
+  title: z.string(),
+  rationale: z.string(),
+  payload: z.record(z.unknown()),
+  status: ProposedActionStatusSchema,
+  reviewedByUserId: z.string().uuid().nullable(),
+  reviewNote: z.string().nullable(),
+  executedResourceId: z.string().uuid().nullable(),
+  reviewedAt: z.string().datetime().nullable(),
+  createdAt: z.string().datetime(),
+  updatedAt: z.string().datetime(),
+});
+export type ProposedAction = z.infer<typeof ProposedActionSchema>;
+
+export const ReviewProposedActionRequestSchema = z.object({
+  decision: z.enum(['approve', 'reject']),
+  reviewNote: z.string().trim().max(1000).optional(),
+});
+export type ReviewProposedActionRequest = z.infer<
+  typeof ReviewProposedActionRequestSchema
+>;
+
+export const AiBudgetSummarySchema = z.object({
+  aiEnabled: z.boolean(),
+  aiKillSwitch: z.boolean(),
+  monthlyAiBudgetUsdCents: z.number().int(),
+  currentMonthSpendUsdCents: z.number().int(),
+  remainingBudgetUsdCents: z.number().int(),
+  totalRequestsThisMonth: z.number().int(),
+});
+export type AiBudgetSummary = z.infer<typeof AiBudgetSummarySchema>;

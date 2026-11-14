@@ -2,12 +2,14 @@ import { randomUUID } from 'node:crypto';
 import { Module } from '@nestjs/common';
 import { ConfigModule, ConfigService } from '@nestjs/config';
 import { LoggerModule } from 'nestjs-pino';
+import { AiModule } from './ai/ai.module';
 import { AuthModule } from './auth/auth.module';
 import { validateEnv, type AppEnv } from './config/env.schema';
 import { DatabaseModule } from './database/database.module';
 import { EmailModule } from './email/email.module';
 import { HealthModule } from './health/health.module';
 import { OrganizationsModule } from './organizations/organizations.module';
+import { RagModule } from './rag/rag.module';
 import { RedisModule } from './redis/redis.module';
 import { WorkOsModule } from './work-os/work-os.module';
 
@@ -68,7 +70,9 @@ import { WorkOsModule } from './work-os/work-os.module';
     EmailModule,
     AuthModule,
     OrganizationsModule,
+    RagModule,
     WorkOsModule,
+    AiModule,
     HealthModule,
   ],
 })

@@ -1,5 +1,6 @@
 import {
   boolean,
+  customType,
   index,
   integer,
   jsonb,
@@ -11,11 +12,37 @@ import {
   uuid,
 } from 'drizzle-orm/pg-core';
 import type {
+  AiFeatureType,
+  KnowledgeSourceType,
   OrganizationRole,
   ProjectVisibility,
+  ProposedActionStatus,
+  ProposedActionType,
   TaskPriority,
   TaskStatus,
 } from '@teamloom/contracts';
+
+/**
+ * Custom Drizzle column type for pgvector `vector(768)`.
+ */
+export const pgVector768 = customType<{
+  data: number[];
+  driverData: string;
+}>({
+  dataType() {
+    return 'vector(768)';
+  },
+  toDriver(value: number[]): string {
+    return `[${value.join(',')}]`;
+  },
+  fromDriver(value: string): number[] {
+    return value
+      .replace(/^\[|\]$/g, '')
+      .split(',')
+      .filter((v) => v.length > 0)
+      .map((v) => Number.parseFloat(v));
+  },
+});
 
 /**
  * Tracks applied hand-written SQL migrations.
@@ -364,6 +391,120 @@ export const documents = pgTable(
   },
   (table) => [
     index('idx_documents_org_project').on(
+      table.organizationId,
+      table.projectId,
+    ),
+  ],
+);
+
+/**
+ * Semantic Knowledge Chunks (RLS-protected, pgvector 768-d embeddings).
+ */
+export const knowledgeChunks = pgTable(
+  'knowledge_chunks',
+  {
+    id: uuid('id').defaultRandom().primaryKey(),
+    organizationId: uuid('organization_id')
+      .notNull()
+      .references(() => organizations.id, { onDelete: 'cascade' }),
+    projectId: uuid('project_id').references(() => projects.id, {
+      onDelete: 'cascade',
+    }),
+    sourceType: text('source_type').$type<KnowledgeSourceType>().notNull(),
+    sourceId: uuid('source_id').notNull(),
+    chunkIndex: integer('chunk_index').notNull(),
+    title: text('title').notNull(),
+    content: text('content').notNull(),
+    contentHash: text('content_hash').notNull(),
+    tokenCount: integer('token_count').default(0).notNull(),
+    embedding: pgVector768('embedding').notNull(),
+    createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
+    updatedAt: timestamp('updated_at', { withTimezone: true }).defaultNow().notNull(),
+  },
+  (table) => [
+    unique('knowledge_chunks_org_source_chunk_unique').on(
+      table.organizationId,
+      table.sourceType,
+      table.sourceId,
+      table.chunkIndex,
+    ),
+    index('idx_knowledge_chunks_org_source').on(
+      table.organizationId,
+      table.sourceType,
+      table.sourceId,
+    ),
+  ],
+);
+
+/**
+ * Per-Organization AI Token & Cost Usage Ledger (RLS-protected).
+ */
+export const aiUsageLedger = pgTable(
+  'ai_usage_ledger',
+  {
+    id: uuid('id').defaultRandom().primaryKey(),
+    organizationId: uuid('organization_id')
+      .notNull()
+      .references(() => organizations.id, { onDelete: 'cascade' }),
+    actorUserId: uuid('actor_user_id').references(() => users.id, {
+      onDelete: 'set null',
+    }),
+    feature: text('feature').$type<AiFeatureType>().notNull(),
+    model: text('model').notNull(),
+    promptTokens: integer('prompt_tokens').default(0).notNull(),
+    completionTokens: integer('completion_tokens').default(0).notNull(),
+    totalTokens: integer('total_tokens').default(0).notNull(),
+    costUsdCents: integer('cost_usd_cents').default(1).notNull(),
+    createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
+  },
+  (table) => [
+    index('idx_ai_usage_ledger_org_created').on(
+      table.organizationId,
+      table.createdAt,
+    ),
+  ],
+);
+
+/**
+ * Human-in-the-Loop Approval Queue for AI Agent Proposed Actions (RLS-protected).
+ */
+export const proposedActions = pgTable(
+  'proposed_actions',
+  {
+    id: uuid('id').defaultRandom().primaryKey(),
+    organizationId: uuid('organization_id')
+      .notNull()
+      .references(() => organizations.id, { onDelete: 'cascade' }),
+    projectId: uuid('project_id')
+      .notNull()
+      .references(() => projects.id, { onDelete: 'cascade' }),
+    requestedByUserId: uuid('requested_by_user_id')
+      .notNull()
+      .references(() => users.id, { onDelete: 'restrict' }),
+    actionType: text('action_type').$type<ProposedActionType>().notNull(),
+    title: text('title').notNull(),
+    rationale: text('rationale').notNull(),
+    payload: jsonb('payload').$type<Record<string, unknown>>().notNull(),
+    status: text('status')
+      .$type<ProposedActionStatus>()
+      .default('pending')
+      .notNull(),
+    reviewedByUserId: uuid('reviewed_by_user_id').references(() => users.id, {
+      onDelete: 'set null',
+    }),
+    reviewNote: text('review_note'),
+    executedResourceId: uuid('executed_resource_id'),
+    reviewedAt: timestamp('reviewed_at', { withTimezone: true }),
+    createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
+    updatedAt: timestamp('updated_at', { withTimezone: true }).defaultNow().notNull(),
+  },
+  (table) => [
+    index('idx_proposed_actions_org_status').on(
+      table.organizationId,
+      table.status,
+      table.createdAt,
+    ),
+    index('idx_proposed_actions_project').on(
       table.organizationId,
       table.projectId,
     ),

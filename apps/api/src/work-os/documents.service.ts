@@ -18,6 +18,7 @@ import {
 } from '../database/database.module';
 import { documents, projects } from '../database/schema';
 import type { TenantMembershipContext } from '../organizations/require-permission.decorator';
+import { KnowledgeRetrievalService } from '../rag/knowledge-retrieval.service';
 import { ProjectsService } from './projects.service';
 
 @Injectable()
@@ -26,6 +27,8 @@ export class DocumentsService {
     @Inject(DatabaseService) private readonly dbService: DatabaseService,
     @Inject(ProjectsService) private readonly projectsService: ProjectsService,
     @Inject(AuditLogService) private readonly auditLog: AuditLogService,
+    @Inject(KnowledgeRetrievalService)
+    private readonly knowledgeRetrieval: KnowledgeRetrievalService,
   ) {}
 
   async createDocument(
@@ -34,7 +37,7 @@ export class DocumentsService {
     meta: RequestMetadata,
     actorType: 'user' | 'agent' = 'user',
   ): Promise<Document> {
-    return this.dbService.withTenantContext(
+    const createdDoc = await this.dbService.withTenantContext(
       { organizationId: tenant.organizationId, userId: tenant.userId },
       async (tx) => {
         if (input.projectId) {
@@ -81,9 +84,20 @@ export class DocumentsService {
           tx,
         );
 
-        return this.mapDocument(created);
+        return created;
       },
     );
+
+    await this.knowledgeRetrieval.indexDocument({
+      organizationId: tenant.organizationId,
+      userId: tenant.userId,
+      documentId: createdDoc.id,
+      projectId: createdDoc.projectId,
+      title: createdDoc.title,
+      contentMarkdown: createdDoc.contentMarkdown,
+    });
+
+    return this.mapDocument(createdDoc);
   }
 
   async listDocuments(
@@ -125,7 +139,6 @@ export class DocumentsService {
               return false;
             }
             if (doc.projectId === null) {
-              // Organization-wide documents are visible to internal members, not external guests
               return tenant.role !== 'guest';
             }
             const parentProject = projectById.get(doc.projectId);
@@ -166,7 +179,7 @@ export class DocumentsService {
     meta: RequestMetadata,
     actorType: 'user' | 'agent' = 'user',
   ): Promise<Document> {
-    return this.dbService.withTenantContext(
+    const updatedDoc = await this.dbService.withTenantContext(
       { organizationId: tenant.organizationId, userId: tenant.userId },
       async (tx) => {
         const existing = await this.assertAndGetAccessibleDocument(
@@ -228,9 +241,29 @@ export class DocumentsService {
           tx,
         );
 
-        return this.mapDocument(updated);
+        return updated;
       },
     );
+
+    if (updatedDoc.archivedAt !== null) {
+      await this.knowledgeRetrieval.removeSourceChunks(
+        tenant.organizationId,
+        tenant.userId,
+        'document',
+        updatedDoc.id,
+      );
+    } else {
+      await this.knowledgeRetrieval.indexDocument({
+        organizationId: tenant.organizationId,
+        userId: tenant.userId,
+        documentId: updatedDoc.id,
+        projectId: updatedDoc.projectId,
+        title: updatedDoc.title,
+        contentMarkdown: updatedDoc.contentMarkdown,
+      });
+    }
+
+    return this.mapDocument(updatedDoc);
   }
 
   async deleteDocument(
@@ -245,6 +278,14 @@ export class DocumentsService {
           tx,
           tenant,
           documentId,
+        );
+
+        await this.knowledgeRetrieval.removeSourceChunks(
+          tenant.organizationId,
+          tenant.userId,
+          'document',
+          documentId,
+          tx,
         );
 
         await tx

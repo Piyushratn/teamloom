@@ -27,6 +27,7 @@ import {
   tasks,
 } from '../database/schema';
 import type { TenantMembershipContext } from '../organizations/require-permission.decorator';
+import { KnowledgeRetrievalService } from '../rag/knowledge-retrieval.service';
 import { ProjectsService } from './projects.service';
 
 export interface ListTasksFilter {
@@ -41,6 +42,8 @@ export class TasksService {
     @Inject(DatabaseService) private readonly dbService: DatabaseService,
     @Inject(ProjectsService) private readonly projectsService: ProjectsService,
     @Inject(AuditLogService) private readonly auditLog: AuditLogService,
+    @Inject(KnowledgeRetrievalService)
+    private readonly knowledgeRetrieval: KnowledgeRetrievalService,
   ) {}
 
   async createTask(
@@ -50,7 +53,7 @@ export class TasksService {
     meta: RequestMetadata,
     actorType: 'user' | 'agent' = 'user',
   ): Promise<Task> {
-    return this.dbService.withTenantContext(
+    const createdTask = await this.dbService.withTenantContext(
       { organizationId: tenant.organizationId, userId: tenant.userId },
       async (tx) => {
         await this.projectsService.assertAndGetAccessibleProject(
@@ -67,7 +70,6 @@ export class TasksService {
           );
         }
 
-        // Atomically increment task_sequence on the project row
         const [seqRow] = await tx
           .update(projects)
           .set({
@@ -139,9 +141,24 @@ export class TasksService {
           tx,
         );
 
-        return this.mapTask(created);
+        return created;
       },
     );
+
+    await this.knowledgeRetrieval.indexTask({
+      organizationId: tenant.organizationId,
+      userId: tenant.userId,
+      taskId: createdTask.id,
+      projectId: createdTask.projectId,
+      displayId: createdTask.displayId,
+      title: createdTask.title,
+      description: createdTask.description,
+      status: createdTask.status,
+      priority: createdTask.priority,
+      labels: createdTask.labels ?? [],
+    });
+
+    return this.mapTask(createdTask);
   }
 
   async listTasks(
@@ -225,7 +242,7 @@ export class TasksService {
     meta: RequestMetadata,
     actorType: 'user' | 'agent' = 'user',
   ): Promise<Task> {
-    return this.dbService.withTenantContext(
+    const updatedTask = await this.dbService.withTenantContext(
       { organizationId: tenant.organizationId, userId: tenant.userId },
       async (tx) => {
         await this.projectsService.assertAndGetAccessibleProject(
@@ -315,9 +332,24 @@ export class TasksService {
           tx,
         );
 
-        return this.mapTask(updated);
+        return updated;
       },
     );
+
+    await this.knowledgeRetrieval.indexTask({
+      organizationId: tenant.organizationId,
+      userId: tenant.userId,
+      taskId: updatedTask.id,
+      projectId: updatedTask.projectId,
+      displayId: updatedTask.displayId,
+      title: updatedTask.title,
+      description: updatedTask.description,
+      status: updatedTask.status,
+      priority: updatedTask.priority,
+      labels: updatedTask.labels ?? [],
+    });
+
+    return this.mapTask(updatedTask);
   }
 
   async deleteTask(
@@ -349,6 +381,14 @@ export class TasksService {
             message: 'Task not found in this project',
           });
         }
+
+        await this.knowledgeRetrieval.removeSourceChunks(
+          tenant.organizationId,
+          tenant.userId,
+          'task',
+          taskId,
+          tx,
+        );
 
         await tx
           .delete(tasks)

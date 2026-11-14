@@ -211,3 +211,153 @@ export const AuditLogEntrySchema = z.object({
   createdAt: z.string().datetime(),
 });
 export type AuditLogEntry = z.infer<typeof AuditLogEntrySchema>;
+
+/**
+ * Core Work OS Schemas: Projects, Tasks, Comments & Documents (Stage 4)
+ */
+export const ProjectVisibilitySchema = z.enum(['organization', 'private']);
+export type ProjectVisibility = z.infer<typeof ProjectVisibilitySchema>;
+
+export const ProjectKeySchema = z
+  .string()
+  .trim()
+  .toUpperCase()
+  .min(2, 'Project key must be 2–10 uppercase letters or numbers')
+  .max(10, 'Project key must be 2–10 uppercase letters or numbers')
+  .regex(/^[A-Z][A-Z0-9]*$/, 'Project key must start with a letter and contain only A-Z and 0-9');
+
+export const CreateProjectRequestSchema = z.object({
+  key: ProjectKeySchema,
+  name: z.string().trim().min(2).max(100),
+  description: z.string().trim().max(2000).optional(),
+  visibility: ProjectVisibilitySchema.default('organization'),
+});
+export type CreateProjectRequest = z.infer<typeof CreateProjectRequestSchema>;
+
+export const UpdateProjectRequestSchema = z.object({
+  name: z.string().trim().min(2).max(100).optional(),
+  description: z.string().trim().max(2000).nullable().optional(),
+  visibility: ProjectVisibilitySchema.optional(),
+  archived: z.boolean().optional(),
+});
+export type UpdateProjectRequest = z.infer<typeof UpdateProjectRequestSchema>;
+
+export const ProjectSchema = z.object({
+  id: z.string().uuid(),
+  organizationId: z.string().uuid(),
+  key: z.string(),
+  name: z.string(),
+  description: z.string().nullable(),
+  visibility: ProjectVisibilitySchema,
+  taskSequence: z.number().int(),
+  createdByUserId: z.string().uuid(),
+  archivedAt: z.string().datetime().nullable(),
+  createdAt: z.string().datetime(),
+  updatedAt: z.string().datetime(),
+});
+export type Project = z.infer<typeof ProjectSchema>;
+
+export const TaskStatusSchema = z.enum([
+  'backlog',
+  'todo',
+  'in_progress',
+  'in_review',
+  'done',
+  'canceled',
+]);
+export type TaskStatus = z.infer<typeof TaskStatusSchema>;
+
+export const TaskPrioritySchema = z.enum(['low', 'medium', 'high', 'urgent']);
+export type TaskPriority = z.infer<typeof TaskPrioritySchema>;
+
+export const CreateTaskRequestSchema = z.object({
+  title: z.string().trim().min(2).max(240),
+  description: z.string().trim().max(10000).optional(),
+  status: TaskStatusSchema.default('todo'),
+  priority: TaskPrioritySchema.default('medium'),
+  assigneeUserId: z.string().uuid().nullable().optional(),
+  dueDate: z.string().datetime().nullable().optional(),
+  labels: z.array(z.string().trim().min(1).max(32)).max(20).default([]),
+});
+export type CreateTaskRequest = z.infer<typeof CreateTaskRequestSchema>;
+
+export const UpdateTaskRequestSchema = z.object({
+  title: z.string().trim().min(2).max(240).optional(),
+  description: z.string().trim().max(10000).nullable().optional(),
+  status: TaskStatusSchema.optional(),
+  priority: TaskPrioritySchema.optional(),
+  assigneeUserId: z.string().uuid().nullable().optional(),
+  dueDate: z.string().datetime().nullable().optional(),
+  labels: z.array(z.string().trim().min(1).max(32)).max(20).optional(),
+  position: z.number().int().min(0).optional(),
+});
+export type UpdateTaskRequest = z.infer<typeof UpdateTaskRequestSchema>;
+
+export const TaskSchema = z.object({
+  id: z.string().uuid(),
+  organizationId: z.string().uuid(),
+  projectId: z.string().uuid(),
+  number: z.number().int(),
+  displayId: z.string(),
+  title: z.string(),
+  description: z.string().nullable(),
+  status: TaskStatusSchema,
+  priority: TaskPrioritySchema,
+  assigneeUserId: z.string().uuid().nullable(),
+  reporterUserId: z.string().uuid(),
+  dueDate: z.string().datetime().nullable(),
+  labels: z.array(z.string()),
+  position: z.number().int(),
+  createdAt: z.string().datetime(),
+  updatedAt: z.string().datetime(),
+});
+export type Task = z.infer<typeof TaskSchema>;
+
+export const CreateTaskCommentRequestSchema = z.object({
+  body: z.string().trim().min(1, 'Comment cannot be empty').max(5000),
+});
+export type CreateTaskCommentRequest = z.infer<
+  typeof CreateTaskCommentRequestSchema
+>;
+
+export const TaskCommentSchema = z.object({
+  id: z.string().uuid(),
+  organizationId: z.string().uuid(),
+  projectId: z.string().uuid(),
+  taskId: z.string().uuid(),
+  authorUserId: z.string().uuid().nullable(),
+  authorType: z.enum(['user', 'agent']),
+  body: z.string(),
+  createdAt: z.string().datetime(),
+  updatedAt: z.string().datetime(),
+});
+export type TaskComment = z.infer<typeof TaskCommentSchema>;
+
+export const CreateDocumentRequestSchema = z.object({
+  projectId: z.string().uuid().nullable().optional(),
+  title: z.string().trim().min(2).max(200),
+  contentMarkdown: z.string().max(100_000).default(''),
+});
+export type CreateDocumentRequest = z.infer<typeof CreateDocumentRequestSchema>;
+
+export const UpdateDocumentRequestSchema = z.object({
+  title: z.string().trim().min(2).max(200).optional(),
+  contentMarkdown: z.string().max(100_000).optional(),
+  archived: z.boolean().optional(),
+});
+export type UpdateDocumentRequest = z.infer<typeof UpdateDocumentRequestSchema>;
+
+export const DocumentSchema = z.object({
+  id: z.string().uuid(),
+  organizationId: z.string().uuid(),
+  projectId: z.string().uuid().nullable(),
+  title: z.string(),
+  contentMarkdown: z.string(),
+  version: z.number().int(),
+  createdByUserId: z.string().uuid(),
+  updatedByUserId: z.string().uuid(),
+  archivedAt: z.string().datetime().nullable(),
+  createdAt: z.string().datetime(),
+  updatedAt: z.string().datetime(),
+});
+export type Document = z.infer<typeof DocumentSchema>;

@@ -1,6 +1,8 @@
 import { describe, expect, it } from 'vitest';
 import {
   ApiErrorResponseSchema,
+  CreateProjectRequestSchema,
+  CreateTaskRequestSchema,
   HealthStatusSchema,
   OrganizationRoleSchema,
   SignUpRequestSchema,
@@ -64,5 +66,27 @@ describe('@teamloom/contracts schemas', () => {
       fullName: 'Piyush Ratn',
     });
     expect(weakPassword.success).toBe(false);
+  });
+
+  it('normalizes project keys to uppercase and applies defaults on CreateTaskRequestSchema', () => {
+    const proj = CreateProjectRequestSchema.safeParse({
+      key: ' eng1 ',
+      name: 'Core Engineering',
+    });
+    expect(proj.success).toBe(true);
+    if (proj.success) {
+      expect(proj.data.key).toBe('ENG1');
+      expect(proj.data.visibility).toBe('organization');
+    }
+
+    const task = CreateTaskRequestSchema.safeParse({
+      title: 'Implement RLS on tasks table',
+    });
+    expect(task.success).toBe(true);
+    if (task.success) {
+      expect(task.data.status).toBe('todo');
+      expect(task.data.priority).toBe('medium');
+      expect(task.data.labels).toEqual([]);
+    }
   });
 });

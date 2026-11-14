@@ -9,6 +9,7 @@ import { EmailModule } from './email/email.module';
 import { HealthModule } from './health/health.module';
 import { OrganizationsModule } from './organizations/organizations.module';
 import { RedisModule } from './redis/redis.module';
+import { WorkOsModule } from './work-os/work-os.module';
 
 @Module({
   imports: [
@@ -67,6 +68,7 @@ import { RedisModule } from './redis/redis.module';
     EmailModule,
     AuthModule,
     OrganizationsModule,
+    WorkOsModule,
     HealthModule,
   ],
 })

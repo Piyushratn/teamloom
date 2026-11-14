@@ -21,7 +21,9 @@ export type PermissionAction =
   | 'task:delete'
   | 'comment:create'
   | 'document:create'
-  | 'document:read';
+  | 'document:read'
+  | 'document:update'
+  | 'document:delete';
 
 export const ROLE_PERMISSION_MATRIX: Record<
   OrganizationRole,
@@ -49,6 +51,8 @@ export const ROLE_PERMISSION_MATRIX: Record<
     'comment:create',
     'document:create',
     'document:read',
+    'document:update',
+    'document:delete',
   ],
   admin: [
     'org:read',
@@ -71,6 +75,8 @@ export const ROLE_PERMISSION_MATRIX: Record<
     'comment:create',
     'document:create',
     'document:read',
+    'document:update',
+    'document:delete',
   ],
   member: [
     'org:read',
@@ -86,6 +92,7 @@ export const ROLE_PERMISSION_MATRIX: Record<
     'comment:create',
     'document:create',
     'document:read',
+    'document:update',
   ],
   guest: [
     'org:read',

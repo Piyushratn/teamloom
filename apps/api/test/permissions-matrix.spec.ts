@@ -28,6 +28,8 @@ const ALL_PERMISSIONS: PermissionAction[] = [
   'comment:create',
   'document:create',
   'document:read',
+  'document:update',
+  'document:delete',
 ];
 
 describe('RBAC Permission Matrix (owner, admin, member, guest)', () => {
@@ -42,11 +44,13 @@ describe('RBAC Permission Matrix (owner, admin, member, guest)', () => {
     expect(roleHasPermission('admin', 'member:invite')).toBe(true);
     expect(roleHasPermission('admin', 'audit:read')).toBe(true);
     expect(roleHasPermission('admin', 'ai:manage_settings')).toBe(true);
+    expect(roleHasPermission('admin', 'document:delete')).toBe(true);
   });
 
-  it('allows member to work on projects/tasks/AI approvals but blocks member/org/audit admin actions', () => {
+  it('allows member to work on projects/tasks/docs/AI approvals but blocks admin/delete actions', () => {
     expect(roleHasPermission('member', 'project:create')).toBe(true);
     expect(roleHasPermission('member', 'task:create')).toBe(true);
+    expect(roleHasPermission('member', 'document:update')).toBe(true);
     expect(roleHasPermission('member', 'ai:approve_actions')).toBe(true);
 
     expect(roleHasPermission('member', 'member:invite')).toBe(false);
@@ -54,6 +58,7 @@ describe('RBAC Permission Matrix (owner, admin, member, guest)', () => {
     expect(roleHasPermission('member', 'audit:read')).toBe(false);
     expect(roleHasPermission('member', 'ai:manage_settings')).toBe(false);
     expect(roleHasPermission('member', 'project:delete')).toBe(false);
+    expect(roleHasPermission('member', 'document:delete')).toBe(false);
   });
 
   it('restricts guest to read/comment/task:update and enforces guestProjectIds allowlist', () => {
@@ -66,6 +71,7 @@ describe('RBAC Permission Matrix (owner, admin, member, guest)', () => {
       'document:read',
     ]);
     expect(roleHasPermission('guest', 'task:create')).toBe(false);
+    expect(roleHasPermission('guest', 'document:update')).toBe(false);
     expect(roleHasPermission('guest', 'ai:approve_actions')).toBe(false);
 
     const allowedProject = '11111111-2222-3333-4444-555555555555';

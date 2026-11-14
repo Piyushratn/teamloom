@@ -40,10 +40,25 @@ describe('SQL Migrations & Tenant RLS Context (Integration)', () => {
     expect(insideResult?.org_id).toBe(testOrgId);
     expect(insideResult?.user_id).toBe(testUserId);
 
-    // Outside the transaction on the pool, the context must not leak
     const outsideRes = await dbService.pool.query<{ org_id: string | null }>(
       'SELECT app_current_organization_id() AS org_id',
     );
     expect(outsideRes.rows[0]?.org_id).toBeNull();
+  });
+
+  it('verifies auth tables (users, auth_sessions, verification_tokens) exist and are queryable by teamloom_app', async () => {
+    const res = await dbService.pool.query<{ table_name: string }>(`
+      SELECT table_name
+      FROM information_schema.tables
+      WHERE table_schema = 'public'
+        AND table_name IN ('users', 'auth_sessions', 'verification_tokens')
+      ORDER BY table_name;
+    `);
+
+    expect(res.rows.map((r) => r.table_name)).toEqual([
+      'auth_sessions',
+      'users',
+      'verification_tokens',
+    ]);
   });
 });

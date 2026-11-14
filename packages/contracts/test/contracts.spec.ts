@@ -3,6 +3,7 @@ import {
   ApiErrorResponseSchema,
   HealthStatusSchema,
   OrganizationRoleSchema,
+  SignUpRequestSchema,
 } from '../src/index';
 
 describe('@teamloom/contracts schemas', () => {
@@ -44,5 +45,24 @@ describe('@teamloom/contracts schemas', () => {
 
     expect(OrganizationRoleSchema.safeParse('owner').success).toBe(true);
     expect(OrganizationRoleSchema.safeParse('superadmin').success).toBe(false);
+  });
+
+  it('normalizes email and enforces strong password rules on SignUpRequestSchema', () => {
+    const valid = SignUpRequestSchema.safeParse({
+      email: '  Founder@Teamloom.io ',
+      password: 'StrongPassword123',
+      fullName: 'Piyush Ratn',
+    });
+    expect(valid.success).toBe(true);
+    if (valid.success) {
+      expect(valid.data.email).toBe('founder@teamloom.io');
+    }
+
+    const weakPassword = SignUpRequestSchema.safeParse({
+      email: 'founder@teamloom.io',
+      password: 'weak',
+      fullName: 'Piyush Ratn',
+    });
+    expect(weakPassword.success).toBe(false);
   });
 });

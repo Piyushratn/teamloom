@@ -5,9 +5,16 @@ export const EnvSchema = z.object({
   PORT: z.coerce.number().int().positive().default(4000),
   HOST: z.string().default('0.0.0.0'),
   CORS_ORIGIN: z.string().default('http://localhost:3000'),
+  WEB_APP_URL: z.string().url().default('http://localhost:3000'),
   DATABASE_ADMIN_URL: z.string().url(),
   DATABASE_URL: z.string().url(),
   REDIS_URL: z.string().url(),
+  JWT_ACCESS_SECRET: z
+    .string()
+    .min(32)
+    .default('dev_only_jwt_access_secret_must_be_32_chars_long'),
+  JWT_ACCESS_TTL_SECONDS: z.coerce.number().int().positive().default(900), // 15 minutes
+  REFRESH_TOKEN_TTL_DAYS: z.coerce.number().int().positive().default(30),
   SMTP_HOST: z.string().min(1).default('localhost'),
   SMTP_PORT: z.coerce.number().int().positive().default(1025),
   EMAIL_FROM: z.string().email().default('noreply@teamloom.local'),
